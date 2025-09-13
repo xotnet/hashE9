@@ -4,9 +4,12 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <math.h>
 
 const int hashE9Len = 32;
 const int hashE9LenHex = hashE9Len*2 + 1;
+
+static char* memptr = NULL;
 
 static int byteToDec(char* byte) {
 	int a = byte[0] << 24 | byte[1] << 16 | byte[2] << 8 | byte[3];
@@ -35,29 +38,21 @@ void hashE9(const char* data, const int len, char* output) {
 		a ^= ((a + b) * 0xf8be2937) ^ ((a-b-b) * 0x8eff926b);
 		decToBytes(&a, output+c);
 	}
-	int x = 1048576 * 32; // x * 1 Mb
+	int x = 1048576 * 4; // x * 1 Mb
 	char* pool = (char*)malloc(x);
 	if (pool == NULL) {
 		printf("Not enough RAM for hash()\n");
 		return;
 	}
+	for (int i = 0; i<x; ++i) {
+		pool[i] = 0x2a - output[i%hashE9Len] - i>0 ? pool[i-1] : 99;
+	}
 	for (int i = 0; i<x; i += 4) {
-		// init pool array
-		if (i==0) {
-			pool[0] = output[0];
-			pool[1] = output[1];
-			pool[2] = output[2];
-			pool[3] = output[3];
-		} else {
-			pool[i+3] = output[i%hashE9Len];
-		}
-
 		// filling an array randomly
-		pool[i] = data[i%len] ^ output[i%hashE9Len] ^ pool[i] ^ pool[i+1] ^ pool[i+2] ^ (pool[i+3] & pool[abs(pool[i])%(i+1)-1]);
+		pool[i] = (data[i%len] & output[i%hashE9Len]) ^ pool[i] ^ pool[i+1] ^ pool[i+2] ^ (pool[i+3] & pool[i%x]);
 		int32_t a = byteToDec(pool+i);
-		int32_t b = byteToDec((char*)(data+abs(i%len-4)));
-		int ind = abs(((0x7620e1fa * (pool[i] * output[i%hashE9Len])) ^ a) % x);
-		a &= (pool[ind] ^ pool[ind+1] ^ pool[ind+2] ^ pool[ind+3] ^ (output[i%hashE9Len]+1)) * 0x7620e1fa + 0x4012313e + (i*b);
+		int ind = abs(((0x7620e1fa * (pool[i] * output[i%hashE9Len])) ^ a) % (i>0 ? i : 1));
+		a &= (pool[ind] ^ pool[ind+1] ^ pool[ind+2] ^ pool[ind+3] ^ (output[i%hashE9Len]+1)) * 0x7620e1fa + 0x4012313e + (i*a*pool[i%x]);
 		if (pool[i] > 100) {
 			a += 300;
 		} else if (pool[i] > 200) {
@@ -67,11 +62,12 @@ void hashE9(const char* data, const int len, char* output) {
 		}
 		decToBytes(&a, pool+i);
 		// set random index
-		pool[abs(a)%(i+1)] ^= pool[i] * -a * pool[i%x];
+		int16_t temp = i!=0 ? (pool[i-1] * 2) / 3 : (pool[i] - pool[i]*11);
+		pool[i%x] ^= pool[i] * -a * pool[abs(a % (i>0 ? i : 1))] - temp - (int8_t)tan(pool[i]) - (int8_t)cos(pool[i]);
 	}
 	for (int i = 0; i<x; ++i) {
 		int ind = abs(0x72e1abcc * i ^ pool[i]);
-		output[i%hashE9Len] ^= (pool[i] & pool[ind%x]) * 0x23;
+		output[i%hashE9Len] ^= (pool[i] & pool[ind%x]) + pool[i%x];
 	}
 	free(pool);
 }
@@ -83,5 +79,16 @@ void hashE9Hex(const char* data, const int len, char* output) {
 		sprintf(output+(i*2), "%02x", (unsigned char)hash[i]);
 	}
 }
+
+/*int main() {
+	char hash[hashE9LenHex];
+	for (int i = 0; i<24; i++) {
+		char toHash[32];
+		int len = sprintf(toHash, "AnalBoobs+%d", i);
+		hashE9Hex(toHash, len, hash);
+		printf("%s\n", hash);
+	}
+	printf("SUC!\n");
+}*/
 
 #endif
