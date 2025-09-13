@@ -35,17 +35,25 @@ void hashE9(const char* data, const int len, char* output) {
 		a ^= ((a + b) * 0xf8be2937) ^ ((a-b-b) * 0x8eff926b);
 		decToBytes(&a, output+c);
 	}
-	int x = 1048576 * 4; // x * 1 Mb
+	int x = 1048576 * 32; // x * 1 Mb
 	char* pool = (char*)malloc(x);
 	if (pool == NULL) {
 		printf("Not enough RAM for hash()\n");
 		return;
 	}
-	for (int z = 0; z<x; ++z) {
-		pool[z] = output[z%hashE9Len];
-	}
 	for (int i = 0; i<x; i += 4) {
-		pool[i] = data[i%len] ^ output[i%hashE9Len] ^ pool[i] ^ pool[i+1] ^ pool[i+2] ^ pool[i+3];
+		// init pool array
+		if (i==0) {
+			pool[0] = output[0];
+			pool[1] = output[1];
+			pool[2] = output[2];
+			pool[3] = output[3];
+		} else {
+			pool[i+3] = output[i%hashE9Len];
+		}
+
+		// filling an array randomly
+		pool[i] = data[i%len] ^ output[i%hashE9Len] ^ pool[i] ^ pool[i+1] ^ pool[i+2] ^ (pool[i+3] & pool[abs(pool[i])%(i+1)-1]);
 		int32_t a = byteToDec(pool+i);
 		int32_t b = byteToDec((char*)(data+abs(i%len-4)));
 		int ind = abs(((0x7620e1fa * (pool[i] * output[i%hashE9Len])) ^ a) % x);
@@ -58,11 +66,12 @@ void hashE9(const char* data, const int len, char* output) {
 			a *= 37;
 		}
 		decToBytes(&a, pool+i);
-		pool[abs(a)%x] ^= pool[i] * -a * pool[i%x];
+		// set random index
+		pool[abs(a)%(i+1)] ^= pool[i] * -a * pool[i%x];
 	}
 	for (int i = 0; i<x; ++i) {
 		int ind = abs(0x72e1abcc * i ^ pool[i]);
-		output[i%hashE9Len] ^= pool[i] ^ pool[ind%x];
+		output[i%hashE9Len] ^= (pool[i] & pool[ind%x]) * 0x23;
 	}
 	free(pool);
 }
@@ -75,10 +84,10 @@ void hashE9Hex(const char* data, const int len, char* output) {
 	}
 }
 
-/*int main() {
+int main() {
 	char hash[hashE9LenHex];
-	hashE9Hex("anal17", 6, hash);
+	hashE9Hex("anal229", 7, hash);
 	printf("%s\n", hash);
-}*/
+}
 
 #endif
