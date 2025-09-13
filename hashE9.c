@@ -84,10 +84,4 @@ void hashE9Hex(const char* data, const int len, char* output) {
 	}
 }
 
-int main() {
-	char hash[hashE9LenHex];
-	hashE9Hex("anal229", 7, hash);
-	printf("%s\n", hash);
-}
-
 #endif
